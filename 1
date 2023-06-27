@@ -1,0 +1,122 @@
+// cstring_array.cpp
+// Ввод-вывод средствами стандартной библиотеки C (не C++),
+// управление динамической памятью также средствами C (malloc, calloc, realloc, free).
+#include <cstdlib> // malloc, realloc, free
+#include <cstdio>  // puts, fgets
+#include <cstring> // strlen, memcpy
+using namespace std;
+
+/// Максимальная длина строки (не включая '\0'), возвращаемой нашим вариантом gets.
+const size_t MAX_GETS_LENGTH = 1023;
+
+/// Вместо std::gets (которая объявлена устаревшей), мы реализуем
+/// собственную функцию gets, создающую строку в динамической памяти.
+/// Если строка на вводе слишком длинная, отрезаем на MAX_GETS_LENGTH символах.
+/// Возвращает нулевой указатель, если не удалось прочитать ни одного символа.
+char* gets()
+{
+  char buffer[MAX_GETS_LENGTH + 1];
+  if (!fgets(buffer, MAX_GETS_LENGTH + 1, stdin))
+    return nullptr;
+
+  // Узнать длину считанной строки.
+  auto alloc_len = strlen(buffer) + 1;
+  // В отличие от gets, fgets записывает в буфер и перевод строки (если хватает места).
+  // Уберём этот перевод строки.
+  if (alloc_len > 1 && buffer[alloc_len - 2] == '\n')
+  {
+    buffer[alloc_len - 2] = '\0';
+    --alloc_len;
+  }
+  
+  // Выделить в динамической памяти место на копию.
+  const auto new_str = (char*)malloc(alloc_len);
+  if (!new_str) // не хватило памяти?
+    return nullptr;
+
+  // Скопировать содержимое буфера в выделенную память.
+  memcpy(new_str, buffer, alloc_len);
+  return new_str;
+}
+
+/// Читаем построчно и складываем в динамический массив указатели.
+/// Последний указатель в массиве обязательно нулевой.
+/// Возвращает нулевой указатель в случае невозможности выделить память хотя бы на два указателя.
+/// Увеличиваем массив "на ходу" по мере необходимости.
+char** getlines()
+{
+  auto lines = (char**)calloc(2, sizeof(char*));
+  if (!lines) // не хватило памяти?
+    return nullptr;
+
+  // Цикл по строкам.
+  for (size_t item = 0, capacity = 2; lines[item++] = gets();)
+  {
+    if (capacity == item + 1) // все элементы массива задействованы -- увеличим его
+    {
+      // Попытка 1: попробуем увеличить capacity в 1.5 раза.
+      capacity += capacity / 2 + 1;
+      // Для больших capacity возможно переполнение capacity * sizeof(char*).
+      assert((capacity * sizeof(char*)) / sizeof(char*) == capacity);
+      
+      if (auto new_lines = (char**)realloc(lines, capacity * sizeof(char*)))
+      {
+        lines = new_lines;
+      }
+      else // Попытка 2: попробуем увеличить capacity на 1 элемент.
+      if (auto new_lines = (char**)realloc(lines, (item + 2) * sizeof(char*)))
+      {
+        capacity = item + 2;
+        lines = new_lines;
+      }
+      else // Не получается выделить память.
+      {
+        lines[item] = nullptr; // закрывающий нулевой указатель
+        break;
+      }
+    }
+  }
+
+  return lines;
+}
+
+/// Вывести в стандартный поток вывода массив строк.
+void putlines(const char* const* lines)
+{
+  if (!lines)
+    return;
+
+  while (*lines)
+    puts(*lines++);
+}
+
+/// Освободить память, занимаемую массивом строк.
+void freelines(char** lines)
+{
+  if (!lines)
+    return;
+
+  for (auto p = lines; *p != nullptr; ++p)
+    free(*p);
+
+  free(lines);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Тестирование: ввести и вывести текст через консоль.
+int main()
+{
+  while (true)
+  {
+    // Ввод текста.
+    puts("\nEnter a text:\n");
+    auto lines = getlines();
+    clearerr(stdin);
+
+    // Вывод текста.
+    puts("\nThe text entered is:\n");
+    putlines(lines);
+    freelines(lines);
+  }
+}
